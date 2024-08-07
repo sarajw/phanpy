@@ -81,6 +81,7 @@ export default defineConfig({
         description: 'Minimalistic opinionated Mastodon web client',
         // https://github.com/cheeaun/phanpy/issues/231
         // theme_color: '#ffffff',
+        background_color: "#888",
         icons: [
           {
             src: 'logo-192.png',

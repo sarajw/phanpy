@@ -76,9 +76,9 @@ export default defineConfig({
     ]),
     VitePWA({
       manifest: {
-        name: CLIENT_NAME,
-        short_name: CLIENT_NAME,
-        description: 'Minimalistic opinionated Mastodon web client',
+        name: "Masto (Phanpy)",
+        short_name: "Masto",
+        description: "Sara's 2c on the excellent opinionated Mastodon web client Phanpy",
         // https://github.com/cheeaun/phanpy/issues/231
         // theme_color: '#ffffff',
         background_color: "#242526",

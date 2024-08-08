@@ -1206,11 +1206,12 @@ a[href^='http'][rel*='nofollow']:visited:not(:has(div)) {
   display: inline-block;
   position: absolute;
   inset-inline-end: 10px;
-  width: 4px;
-  height: 4px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
-  background-color: var(--link-color);
-  opacity: 0.5;
+  /* background-color: var(--link-color); */
+  background-color: pink;
+  opacity: 0.75;
 }
 
 @keyframes fade-from-top {

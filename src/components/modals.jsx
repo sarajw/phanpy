@@ -74,7 +74,7 @@ export default function Modals() {
                     edit: t`Post updated. Check it out.`,
                   }[type || 'post'],
                   delay: 1000,
-                  duration: 5_000, // 10 seconds
+                  duration: 5_000, // now 5 seconds
                   onClick: (toast) => {
                     toast.hideToast();
                     states.prevLocation = location;

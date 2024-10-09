@@ -1601,7 +1601,7 @@ body:has(#modal-container .carousel) .status .media img:hover {
     margin-top: 8px;
     padding: 8px;
 
-    @supports (animation-timeline: scroll()) {
+    @supports ((animation-timeline: scroll()) and (animation-range: 0% 100%)) {
       animation: media-carousel-slide 1s linear both;
       animation-timeline: --media-carousel;
     }
@@ -1991,9 +1991,11 @@ a.card:is(:hover, :focus):visited {
   flex-direction: column-reverse;
 }
 .card-byline-author {
-  display: inline-block;
+  display: inline-flex;
+  gap: 4px;
   color: var(--text-insignificant-color);
-  padding: 0 8px;
+  padding: 2px 8px;
+  align-items: center;
 
   .avatar {
     width: 16px !important;

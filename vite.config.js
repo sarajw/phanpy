@@ -127,7 +127,7 @@ export default defineConfig({
         short_name: CLIENT_NAME,
         description: 'Minimalistic opinionated Mastodon web client',
         // https://github.com/cheeaun/phanpy/issues/231
-        theme_color: undefined,
+        theme_color: '#000',
         icons: [
           {
             src: 'logo-192.png',

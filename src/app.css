@@ -1317,10 +1317,10 @@ a[href^='http'][rel*='nofollow']:visited:not(:has(div)) {
   display: inline-block;
   position: absolute;
   inset-inline-end: 10px;
-  width: 4px;
-  height: 4px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
-  background-color: var(--link-color);
+  background-color: pink;
   opacity: 0.5;
 }
 

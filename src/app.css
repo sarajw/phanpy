@@ -1571,9 +1571,6 @@ button.carousel-dot:is(.active, [disabled].active) .icon {
     transition-duration: 0s;
   }
 
-  :is(.carousel-top-controls, .carousel-controls)[hidden] {
-    opacity: 1;
-  }
   .carousel:hover + .carousel-top-controls,
   .carousel:hover + .carousel-top-controls + .carousel-controls,
   .carousel-top-controls:hover,
@@ -3001,6 +2998,7 @@ ul.link-list li a .icon {
   .deck > header {
     text-shadow: 0 1px var(--bg-color);
 
+    .szh-menu-container,
     form {
       text-shadow: none;
     }

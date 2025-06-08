@@ -679,8 +679,8 @@ function Status({
       spoilerText ||
       sensitive ||
       poll ||
-      card ||
-      mediaAttachments?.length
+      card /*||
+      mediaAttachments?.length*/
     ) {
       return false;
     }
@@ -3661,7 +3661,7 @@ function StatusCompact({ sKey }) {
 
   return (
     <article
-      class={`status compact-reply ${
+      class={`status compact-reply shazam ${
         visibility === 'direct' ? 'visibility-direct' : ''
       }`}
       tabindex="-1"
@@ -3889,12 +3889,13 @@ const QuoteStatuses = memo(({ id, instance, level = 0 }) => {
   if (level > 2) return;
 
   return uniqueQuotes.map((q) => {
+    const Parent = q.native ? Fragment : LazyShazam;
     return (
-      <LazyShazam id={q.instance + q.id}>
+      <Parent id={q.instance + q.id} key={q.instance + q.id}>
         <Link
           key={q.instance + q.id}
           to={`${q.instance ? `/${q.instance}` : ''}/s/${q.id}`}
-          class="status-card-link"
+          class={`status-card-link ${q.native ? 'quote-post-native' : ''}`}
           data-read-more={_(readMoreText)}
         >
           <Status
@@ -3905,7 +3906,7 @@ const QuoteStatuses = memo(({ id, instance, level = 0 }) => {
             enableCommentHint
           />
         </Link>
-      </LazyShazam>
+      </Parent>
     );
   });
 });

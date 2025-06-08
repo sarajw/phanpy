@@ -1457,7 +1457,7 @@ a[href^='http'][rel*='nofollow']:visited:not(:has(div)) {
   max-width: 100%;
   height: auto;
   max-height: 100vh;
-  max-height: 100dvh;
+  max-height: 100svh;
   vertical-align: middle;
 }
 .carousel .carousel-item video {
@@ -2711,6 +2711,10 @@ ul.link-list li a .icon {
   }
   #columns > * {
     padding: 0 16px;
+
+    &:not(.deck-container) {
+      display: none;
+    }
 
     &:is(#notifications-page) {
       padding-inline: 0;

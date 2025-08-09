@@ -31,6 +31,7 @@ import { api, getPreferences } from '../utils/api';
 import { langDetector } from '../utils/browser-translator';
 import db from '../utils/db';
 import emojifyText from '../utils/emojify-text';
+import getDomain from '../utils/get-domain';
 import i18nDuration from '../utils/i18n-duration';
 import isRTL from '../utils/is-rtl';
 import localeMatch from '../utils/locale-match';
@@ -327,7 +328,7 @@ function Compose({
           prefs['posting:default:language']?.toLowerCase() ||
           DEFAULT_LANG,
       );
-      setSensitive(sensitive && !!spoilerText);
+      setSensitive(!!spoilerText);
     } else if (editStatus) {
       const { visibility, language, sensitive, poll, mediaAttachments } =
         editStatus;
@@ -1621,8 +1622,10 @@ function Compose({
             <label
               class={`toolbar-button ${
                 language !== prevLanguage.current ||
-                (autoDetectedLanguages?.length &&
-                  !autoDetectedLanguages.includes(language))
+                (
+                  autoDetectedLanguages?.length &&
+                    !autoDetectedLanguages.includes(language)
+                )
                   ? 'highlight'
                   : ''
               }`}
@@ -1844,17 +1847,27 @@ const supportsCameraCapture = (() => {
   const input = document.createElement('input');
   return 'capture' in input;
 })();
+const isMobileSafari =
+  /iPad|iPhone|iPod/.test(navigator.userAgent) &&
+  /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
 function CameraCaptureInput({
   hidden,
   disabled = false,
   supportedMimeTypes,
   setMediaAttachments,
 }) {
+  // If not Mobile Safari, only apply image/*
+  // Chrome Android doesn't show the camera if image and video combined
+  // It also can't switch between photo and video mode like iOS/Safari
+  const filteredSupportedMimeTypes = isMobileSafari
+    ? supportedMimeTypes
+    : supportedMimeTypes?.filter((mimeType) => !/^image\//i.test(mimeType));
+
   return (
     <input
       type="file"
       hidden={hidden}
-      accept={supportedMimeTypes?.join(',')}
+      accept={filteredSupportedMimeTypes?.join(',')}
       capture="environment"
       disabled={disabled}
       onChange={(e) => {
@@ -2084,8 +2097,11 @@ const Textarea = forwardRef((props, ref) => {
                   acct,
                   emojis,
                   history,
+                  roles,
+                  url,
                 } = result;
                 const displayNameWithEmoji = emojifyText(displayName, emojis);
+                const accountInstance = getDomain(url);
                 // const item = menuItem.cloneNode();
                 if (acct) {
                   html += `
@@ -2100,6 +2116,19 @@ const Textarea = forwardRef((props, ref) => {
                         <br><span class="bidi-isolate">@${encodeHTML(
                           acct,
                         )}</span>
+                        ${
+                          roles?.map(
+                            (role) => ` <span class="tag collapsed">
+                            ${role.name}
+                            ${
+                              !!accountInstance &&
+                              `<span class="more-insignificant">
+                                ${accountInstance}
+                              </span>`
+                            }
+                          </span>`,
+                          ) || ''
+                        }
                       </span>
                     </li>
                   `;
@@ -2322,7 +2351,11 @@ const Textarea = forwardRef((props, ref) => {
           // Get line before cursor position after pressing 'Enter'
           const { key, target } = e;
           const hasTextExpander = hasTextExpanderRef.current;
-          if (key === 'Enter' && !(e.ctrlKey || e.metaKey || hasTextExpander)) {
+          if (
+            key === 'Enter' &&
+            !(e.ctrlKey || e.metaKey || hasTextExpander) &&
+            !e.isComposing
+          ) {
             try {
               const { value, selectionStart } = target;
               const textBeforeCursor = value.slice(0, selectionStart);

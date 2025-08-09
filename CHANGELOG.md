@@ -333,13 +333,23 @@ Recap: Mastodon v4.3 features (https://github.com/mastodon/mastodon/releases/tag
 - 🙈 Handle Mastodon's upcoming `blur` filter https://mastodon.social/@cheeaun/114301571477875063
 - 🐛 Bug fixes
 
-## Next
+## June 8, 2025
+
+📢 https://mastodon.social/@cheeaun/114647753143423772
 
 - 🌟 Featured profiles (for upcoming Mastodon v4.4)
 - 🔑 Revoke access token when logging out
 - 📸 Respect server's media description character limit
 - 🪣 Add indicator for exclusive lists
 - 🧪 Sandbox https://mastodon.social/@cheeaun/114494995294330803
+- 🐛 Bug fixes
+
+## July 18, 2025
+
+📢 https://mastodon.social/@cheeaun/114874317126202331
+
+- 💬 Better display support for Mastodon v4.4's native quote posts
+- 🧮 Math formatting for LaTeX
 - 🐛 Bug fixes
 
 <!--

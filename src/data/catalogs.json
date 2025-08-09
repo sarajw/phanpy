@@ -3,35 +3,35 @@
     "code": "ar-SA",
     "nativeName": "العربية",
     "name": "Arabic",
-    "completion": 24,
+    "completion": 23,
     "listed": false
   },
   {
     "code": "ca-ES",
     "nativeName": "català",
     "name": "Catalan",
-    "completion": 100,
+    "completion": 99,
     "listed": true
   },
   {
     "code": "cs-CZ",
     "nativeName": "čeština",
     "name": "Czech",
-    "completion": 80,
+    "completion": 79,
     "listed": true
   },
   {
     "code": "de-DE",
     "nativeName": "Deutsch",
     "name": "German",
-    "completion": 90,
+    "completion": 89,
     "listed": true
   },
   {
     "code": "eo-UY",
     "nativeName": "Esperanto",
     "name": "Esperanto",
-    "completion": 99,
+    "completion": 98,
     "listed": true
   },
   {
@@ -45,14 +45,14 @@
     "code": "eu-ES",
     "nativeName": "euskara",
     "name": "Basque",
-    "completion": 100,
+    "completion": 99,
     "listed": true
   },
   {
     "code": "fa-IR",
     "nativeName": "فارسی",
     "name": "Persian",
-    "completion": 70,
+    "completion": 69,
     "listed": true
   },
   {
@@ -66,7 +66,7 @@
     "code": "fr-FR",
     "nativeName": "français",
     "name": "French",
-    "completion": 98,
+    "completion": 97,
     "listed": true
   },
   {
@@ -80,14 +80,14 @@
     "code": "he-IL",
     "nativeName": "עברית",
     "name": "Hebrew",
-    "completion": 9,
+    "completion": 23,
     "listed": false
   },
   {
     "code": "it-IT",
     "nativeName": "italiano",
     "name": "Italian",
-    "completion": 100,
+    "completion": 99,
     "listed": true
   },
   {
@@ -101,21 +101,21 @@
     "code": "kab",
     "nativeName": "Taqbaylit",
     "name": "Kabyle",
-    "completion": 94,
+    "completion": 93,
     "listed": true
   },
   {
     "code": "ko-KR",
     "nativeName": "한국어",
     "name": "Korean",
-    "completion": 87,
+    "completion": 86,
     "listed": true
   },
   {
     "code": "lt-LT",
     "nativeName": "lietuvių",
     "name": "Lithuanian",
-    "completion": 100,
+    "completion": 99,
     "listed": true
   },
   {
@@ -129,7 +129,7 @@
     "code": "nl-NL",
     "nativeName": "Nederlands",
     "name": "Dutch",
-    "completion": 74,
+    "completion": 73,
     "listed": true
   },
   {
@@ -157,7 +157,7 @@
     "code": "ru-RU",
     "nativeName": "русский",
     "name": "Russian",
-    "completion": 100,
+    "completion": 99,
     "listed": true
   },
   {
@@ -171,14 +171,14 @@
     "code": "tr-TR",
     "nativeName": "Türkçe",
     "name": "Turkish",
-    "completion": 46,
+    "completion": 45,
     "listed": false
   },
   {
     "code": "uk-UA",
     "nativeName": "українська",
     "name": "Ukrainian",
-    "completion": 91,
+    "completion": 93,
     "listed": true
   },
   {

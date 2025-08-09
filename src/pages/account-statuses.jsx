@@ -21,7 +21,11 @@ import { api } from '../utils/api';
 import pmem from '../utils/pmem';
 import showToast from '../utils/show-toast';
 import states, { saveStatus } from '../utils/states';
-import { isMediaFirstInstance } from '../utils/store-utils';
+import {
+  getCurrentAccountID,
+  isMediaFirstInstance,
+} from '../utils/store-utils';
+import supports from '../utils/supports';
 import useTitle from '../utils/useTitle';
 
 const LIMIT = 20;
@@ -198,23 +202,26 @@ function AccountStatuses() {
     }
     const { value, done } = await accountStatusesIterator.current.next();
     if (value?.length) {
-      // Check if value is same as pinned post (results)
-      // If the index for every post is the same, means API might not support pinned posts
-      if (results.length) {
-        let pinnedStatusesIds = [];
-        if (results[0]?.type === 'pinned') {
-          pinnedStatusesIds = results[0].id;
-        } else {
-          pinnedStatusesIds = results
-            .filter((status) => status._pinned)
-            .map((status) => status.id);
-        }
-        const containsAllPinned = pinnedStatusesIds.every((postId) =>
-          value.some((status) => status.id === postId),
-        );
-        if (containsAllPinned) {
-          // Remove pinned posts
-          results = [];
+      if (!supports('@mastodon/pinned-posts')) {
+        // Check if value is same as pinned post (results)
+        // If the index for every post is the same, means API might not support pinned posts
+        // TODO: This is a really weird check, fix this at some point
+        if (results.length) {
+          let pinnedStatusesIds = [];
+          if (results[0]?.type === 'pinned') {
+            pinnedStatusesIds = results[0].id;
+          } else {
+            pinnedStatusesIds = results
+              .filter((status) => status._pinned)
+              .map((status) => status.id);
+          }
+          const containsAllPinned = pinnedStatusesIds.every((postId) =>
+            value.some((status) => status.id === postId),
+          );
+          if (containsAllPinned) {
+            // Remove pinned posts
+            results = [];
+          }
         }
       }
 
@@ -287,6 +294,11 @@ function AccountStatuses() {
   }, [id, mediaFirst]);
 
   const { displayName, acct, emojis } = account || {};
+
+  const isSelf = useMemo(
+    () => account?.id === getCurrentAccountID(),
+    [account?.id],
+  );
 
   const filterBarRef = useRef();
   const TimelineStart = useMemo(() => {
@@ -589,7 +601,7 @@ function AccountStatuses() {
           </Menu2>
         }
       />
-      {acct && (
+      {acct && !isSelf && (
         <data
           class="compose-data"
           value={JSON.stringify({
@@ -660,7 +672,9 @@ function MonthPicker(props) {
           <option
             value={
               // Month is 1-indexed
-              (i + 1).toString().padStart(2, '0')
+              (i + 1)
+                .toString()
+                .padStart(2, '0')
             }
             key={i}
           >

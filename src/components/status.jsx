@@ -81,6 +81,7 @@ import Link from './link';
 import Media, { isMediaCaptionLong } from './media';
 import MenuLink from './menu-link';
 import RelativeTime from './relative-time';
+import ThreadBadge from './thread-badge';
 import TranslationBlock from './translation-block';
 
 const SHOW_COMMENT_COUNT_LIMIT = 280;
@@ -1083,9 +1084,7 @@ function Status({
   const contentTranslationHideLanguages =
     snapStates.settings.contentTranslationHideLanguages || [];
   const [differentLanguage, setDifferentLanguage] = useState(
-    () =>
-      DIFFERENT_LANG_CHECK[language + contentTranslationHideLanguages] ||
-      checkDifferentLanguage(language, contentTranslationHideLanguages),
+    DIFFERENT_LANG_CHECK[language + contentTranslationHideLanguages],
   );
   useEffect(() => {
     if (!language || differentLanguage) {
@@ -1106,7 +1105,7 @@ function Status({
       if (different) setDifferentLanguage(different);
     }, 1);
     return () => clearTimeout(timeout);
-  }, [language, differentLanguage, contentTranslationHideLanguages]);
+  }, [language, differentLanguage]);
 
   const reblogIterator = useRef();
   const favouriteIterator = useRef();
@@ -2066,6 +2065,12 @@ function Status({
                   showAcct={isSizeLarge}
                 />
               </span>
+              {withinContext && isThread && (
+                <ThreadBadge
+                  showIcon={isSizeLarge}
+                  index={snapStates.statusThreadNumber[sKey]}
+                />
+              )}
               {/* {inReplyToAccount && !withinContext && size !== 's' && (
                 <>
                   {' '}
@@ -2208,15 +2213,11 @@ function Status({
           {!withinContext && (
             <>
               {isThread ? (
-                <div class="status-thread-badge">
-                  <Icon icon="thread" size="s" />
-                  <Trans>
-                    Thread
-                    {snapStates.statusThreadNumber[sKey]
-                      ? ` ${snapStates.statusThreadNumber[sKey]}/X`
-                      : ''}
-                  </Trans>
-                </div>
+                <ThreadBadge
+                  showIcon
+                  showText
+                  index={snapStates.statusThreadNumber[sKey]}
+                />
               ) : (
                 !!inReplyToId &&
                 !!inReplyToAccount &&

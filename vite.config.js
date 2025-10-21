@@ -130,6 +130,21 @@ export default defineConfig({
           ]
         : []),
     ]),
+    {
+      // https://developers.cloudflare.com/pages/configuration/early-hints/
+      name: 'generate-headers',
+      writeBundle(_, bundle) {
+        const cssFiles = Object.keys(bundle).filter((file) =>
+          file.endsWith('.css'),
+        );
+        if (cssFiles.length > 0) {
+          const links = cssFiles
+            .map((file) => `  Link: <${file}>; rel=preload; as=style`)
+            .join('\n');
+          fs.writeFileSync(resolve(__dirname, 'dist/_headers'), `/\n${links}`);
+        }
+      },
+    },
     VitePWA({
       manifest: {
         name: CLIENT_NAME,
@@ -174,12 +189,35 @@ export default defineConfig({
       brotli: true,
       open: false,
     }),
+    {
+      name: 'css-ordering-plugin',
+      transformIndexHtml(html) {
+        const stylesheets = [];
+        html = html.replace(
+          /<link[^>]*rel=["']stylesheet["'][^>]*>/g,
+          (match) => {
+            stylesheets.push(match);
+            return '';
+          },
+        );
+
+        // Try to place before first <link> tag, fallback to after last <meta> tag
+        const linkRegex = /<link[^>]*>/;
+        if (linkRegex.test(html)) {
+          return html.replace(linkRegex, (match) => {
+            return stylesheets.join('') + match;
+          });
+        } else {
+          return html.replace(/(<meta[^>]*>)(?![\s\S]*<meta)/, (match) => {
+            return match + stylesheets.join('');
+          });
+        }
+      },
+    },
   ],
   build: {
     sourcemap: true,
-    // Note: In Vite 6, if cssCodeSplit = false, it will show error "Cannot read properties of undefined (reading 'includes')"
-    // TODO: Revisit this when this issue is fixed
-    // cssCodeSplit: false,
+    cssCodeSplit: false,
     rollupOptions: {
       treeshake: false,
       input: {
@@ -236,6 +274,29 @@ export default defineConfig({
                 }
               });
             }
+          },
+        },
+        {
+          name: 'remove-chunk-sourcemaps',
+          generateBundle(_, bundle) {
+            // Remove .js.map files and sourcemap references for specific chunks
+            Object.keys(bundle).forEach((fileName) => {
+              const shouldRemoveSourcemap =
+                fileName.includes('locales/') || fileName.includes('icons/');
+
+              if (fileName.endsWith('.js.map') && shouldRemoveSourcemap) {
+                delete bundle[fileName];
+              } else if (fileName.endsWith('.js') && shouldRemoveSourcemap) {
+                const chunk = bundle[fileName];
+                if (chunk.type === 'chunk' && chunk.code) {
+                  // Remove sourceMappingURL comment
+                  chunk.code = chunk.code.replace(
+                    /\/\/# sourceMappingURL=.+\.js\.map\n?$/,
+                    '',
+                  );
+                }
+              }
+            });
           },
         },
       ],

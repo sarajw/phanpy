@@ -13,6 +13,7 @@ import { useSnapshot } from 'valtio';
 import supportedLanguages from '../data/status-supported-languages';
 import { api, getPreferences } from '../utils/api';
 import db from '../utils/db';
+import { getDtfLocale } from '../utils/dtf-locale';
 import localeMatch from '../utils/locale-match';
 import localeCode2Text from '../utils/localeCode2Text';
 import mem from '../utils/mem';
@@ -88,7 +89,7 @@ const expiresInFromExpiresAt = (expiresAt) => {
 };
 
 const DEFAULT_LANG = localeMatch(
-  [new Intl.DateTimeFormat().resolvedOptions().locale, ...navigator.languages],
+  [getDtfLocale(), ...navigator.languages],
   supportedLanguages.map((l) => l[0]),
   'en',
 );
@@ -120,6 +121,7 @@ const DEFAULT_SCHEDULED_AT = Math.max(10 * 60 * 1000, MIN_SCHEDULED_AT); // 10 m
 function Compose({
   onClose,
   replyToStatus,
+  replyMode = 'all',
   editStatus,
   draftStatus,
   quoteStatus,
@@ -256,13 +258,12 @@ function Compose({
     if (!textareaRef.current) return;
     textareaRef.current.dispatchEvent(new Event('input'));
   };
-  const focusTextarea = () => {
+  const focusTextarea = (cursorPosition) => {
     setTimeout(() => {
       if (!textareaRef.current) return;
-      // status starts with newline or space, focus on first position
-      if (/^\n|\s/.test(draftStatus?.status)) {
-        textareaRef.current.selectionStart = 0;
-        textareaRef.current.selectionEnd = 0;
+      // If cursor position is provided, set it
+      if (cursorPosition !== undefined) {
+        textareaRef.current.setSelectionRange(cursorPosition, cursorPosition);
       }
       console.debug('FOCUS textarea');
       textareaRef.current?.focus();
@@ -356,13 +357,41 @@ function Compose({
       const allMentions = [...mentions].filter(
         (m) => m !== currentAccountInfo.acct,
       );
+
       if (allMentions.length > 0) {
-        textareaRef.current.value = `${allMentions
-          .map((m) => `@${m}`)
-          .join(' ')} `;
-        oninputTextarea();
+        const authorMention = `@${replyToStatus.account.acct}`;
+        const otherMentions = allMentions
+          .filter((m) => m !== replyToStatus.account.acct)
+          .map((m) => `@${m}`);
+
+        if (replyMode === 'author-only') {
+          // Mode 1: Only mention the author
+          textareaRef.current.value = `${authorMention} `;
+          oninputTextarea();
+          focusTextarea();
+        } else if (replyMode === 'author-first') {
+          // Mode 2: Mention author first, then others at the end after 2 newlines
+          if (otherMentions.length > 0) {
+            textareaRef.current.value = `${authorMention} \n\n${otherMentions.join(' ')}`;
+            oninputTextarea();
+            // Set cursor position after the author mention
+            const cursorPosition = authorMention.length + 1; // +1 for the space
+            focusTextarea(cursorPosition);
+          } else {
+            // If no other mentions, just mention the author
+            textareaRef.current.value = `${authorMention} `;
+            oninputTextarea();
+            focusTextarea();
+          }
+        } else {
+          // Mode 3 (default 'all'): All mentions at the beginning
+          textareaRef.current.value = `${allMentions
+            .map((m) => `@${m}`)
+            .join(' ')} `;
+          oninputTextarea();
+          focusTextarea();
+        }
       }
-      focusTextarea();
       setVisibility(
         visibility === 'public' && prefs['posting:default:visibility']
           ? prefs['posting:default:visibility'].toLowerCase()
@@ -465,7 +494,9 @@ function Compose({
       };
       textareaRef.current.value = status;
       oninputTextarea();
-      focusTextarea();
+      // status starts with newline or space, focus on first position
+      const cursorPos = /^\n|\s/.test(status) ? 0 : undefined;
+      focusTextarea(cursorPos);
       if (spoilerText) spoilerTextRef.current.value = spoilerText;
       if (visibility) setVisibility(visibility);
       setLanguage(
@@ -480,7 +511,7 @@ function Compose({
       if (scheduledAt) setScheduledAt(scheduledAt);
       if (quoteApprovalPolicy) setQuoteApprovalPolicy(quoteApprovalPolicy);
     }
-  }, [draftStatus, editStatus, replyToStatus]);
+  }, [draftStatus, editStatus, replyToStatus, replyMode]);
 
   // focus textarea when state.composerState.minimized turns false
   const snapStates = useSnapshot(states);
@@ -1057,6 +1088,7 @@ function Compose({
                       const passData = {
                         editStatus,
                         replyToStatus,
+                        replyMode,
                         draftStatus: {
                           uid: UID.current,
                           status: textareaRef.current.value,
@@ -1094,9 +1126,9 @@ function Compose({
           )}
         </div>
         {!!replyToStatus && (
-          <div class="status-preview">
+          <details class="status-preview" open>
             <Status status={replyToStatus} size="s" previewMode />
-            <div class="status-preview-legend reply-to">
+            <summary class="status-preview-legend reply-to">
               {replyToStatusMonthsAgo > 0 ? (
                 <Trans>
                   Replying to @
@@ -1114,16 +1146,16 @@ function Compose({
                   &rsquo;s post
                 </Trans>
               )}
-            </div>
-          </div>
+            </summary>
+          </details>
         )}
         {!!editStatus && (
-          <div class="status-preview">
+          <details class="status-preview">
             <Status status={editStatus} size="s" previewMode />
-            <div class="status-preview-legend">
+            <summary class="status-preview-legend">
               <Trans>Editing source post</Trans>
-            </div>
-          </div>
+            </summary>
+          </details>
         )}
         <form
           ref={formRef}

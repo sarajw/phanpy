@@ -1,10 +1,10 @@
 import './status.css';
 
 import { msg, plural } from '@lingui/core/macro';
-import { Trans, useLingui } from '@lingui/react/macro';
+import { Plural, Trans, useLingui } from '@lingui/react/macro';
 import { ControlledMenu, MenuDivider, MenuItem } from '@szhsin/react-menu';
 import { shallowEqual } from 'fast-equals';
-import pThrottle from 'p-throttle';
+import PQueue from 'p-queue';
 import { Fragment } from 'preact';
 import { memo } from 'preact/compat';
 import {
@@ -30,6 +30,7 @@ import getTranslateTargetLanguage from '../utils/get-translate-target-language';
 import getHTMLText from '../utils/getHTMLText';
 import htmlContentLength from '../utils/html-content-length';
 import localeMatch from '../utils/locale-match';
+import mem from '../utils/mem';
 import niceDateTime from '../utils/nice-date-time';
 import openCompose from '../utils/open-compose';
 import pmem from '../utils/pmem';
@@ -76,20 +77,24 @@ import RelativeTime from './relative-time';
 import StatusButton from './status-button';
 import StatusCard from './status-card';
 import StatusCompact from './status-compact';
+import SubMenu2 from './submenu2';
 import ThreadBadge from './thread-badge';
 import TranslationBlock from './translation-block';
 
 const SHOW_COMMENT_COUNT_LIMIT = 280;
 const INLINE_TRANSLATE_LIMIT = 140;
 
-const throttle = pThrottle({
-  limit: 1,
+const accountQueue = new PQueue({
+  concurrency: 1,
   interval: 1000,
+  intervalCap: 1,
 });
-function fetchAccount(id, masto) {
-  return masto.v1.accounts.$select(id).fetch();
+function fetchAccount(id, masto, signal) {
+  return accountQueue.add(() => masto.v1.accounts.$select(id).fetch(), {
+    signal,
+  });
 }
-const memFetchAccount = pmem(throttle(fetchAccount));
+const memFetchAccount = pmem(fetchAccount);
 
 const isIOS =
   window.ontouchstart !== undefined &&
@@ -164,9 +169,8 @@ function forgivingQSA(selectors = [], dom = document) {
   return [];
 }
 
-function isTranslateble(content, emojis) {
-  if (!content) return false;
-  // Remove custom emojis
+const getHTMLTextForDetectLang = mem((content, emojis) => {
+  if (!content) return '';
   if (emojis?.length) {
     const emojisRegex = new RegExp(
       `:(${emojis.map((e) => e.shortcode).join('|')}):`,
@@ -175,30 +179,7 @@ function isTranslateble(content, emojis) {
     content = content.replace(emojisRegex, '');
   }
   content = content.trim();
-  if (!content) return false;
-  const text = getHTMLText(content, {
-    preProcess: (dom) => {
-      // Remove .mention, pre, code, a:has(.invisible)
-      for (const a of forgivingQSA(
-        ['.mention, pre, code, a:has(.invisible)', '.mention, pre, code'],
-        dom,
-      )) {
-        a.remove();
-      }
-    },
-  });
-  return !!text;
-}
-
-function getHTMLTextForDetectLang(content, emojis) {
-  if (emojis?.length) {
-    const emojisRegex = new RegExp(
-      `:(${emojis.map((e) => e.shortcode).join('|')}):`,
-      'g',
-    );
-    content = content.replace(emojisRegex, '');
-  }
-
+  if (!content) return '';
   return getHTMLText(content, {
     preProcess: (dom) => {
       // Remove anything that can skew the language detection
@@ -223,6 +204,10 @@ function getHTMLTextForDetectLang(content, emojis) {
       }
     },
   });
+});
+
+function isTranslateble(content, emojis) {
+  return !!getHTMLTextForDetectLang(content, emojis);
 }
 
 const SIZE_CLASS = {
@@ -314,6 +299,8 @@ const quoteApprovalPolicyMessages = {
   nobody: msg`Only you can quote`,
 };
 
+const QUESTION_REGEX = /[??？︖❓❔⁇⁈⁉¿‽؟]/;
+
 const { DEV } = import.meta.env;
 
 function Status({
@@ -339,6 +326,7 @@ function Status({
   showActionsBar,
   showReplyParent,
   mediaFirst,
+  showCommentCount: forceShowCommentCount,
 }) {
   const { _, t, i18n } = useLingui();
   const rtf = RTF(i18n.locale);
@@ -518,21 +506,29 @@ function Status({
     inReplyToAccountRef = { url: accountURL, username, displayName };
   }
   const [inReplyToAccount, setInReplyToAccount] = useState(inReplyToAccountRef);
-  if (!withinContext && !inReplyToAccount && inReplyToAccountId) {
-    const account = states.accounts[inReplyToAccountId];
-    if (account) {
-      setInReplyToAccount(account);
-    } else {
-      memFetchAccount(inReplyToAccountId, masto)
+  useEffect(() => {
+    if (!withinContext && !inReplyToAccount && inReplyToAccountId) {
+      const account = states.accounts[inReplyToAccountId];
+      if (account) {
+        setInReplyToAccount(account);
+        return;
+      }
+
+      const abortController = new AbortController();
+      memFetchAccount(inReplyToAccountId, masto, abortController.signal)
         .then((account) => {
           setInReplyToAccount(account);
           states.accounts[account.id] = account;
         })
         .catch((e) => {});
+
+      return () => {
+        abortController.abort();
+      };
     }
-  }
+  }, [withinContext, inReplyToAccount, inReplyToAccountId]);
   const mentionSelf =
-    inReplyToAccountId === currentAccount ||
+    (inReplyToAccountId && inReplyToAccountId === currentAccount) ||
     mentions?.find((mention) => mention.id === currentAccount);
 
   const prefs = getPreferences();
@@ -753,7 +749,7 @@ function Status({
 
   const postQuoteApprovalPolicy = getPostQuoteApprovalPolicy(quoteApproval);
 
-  const replyStatus = (e) => {
+  const replyStatus = (e, replyMode = 'all') => {
     if (!sameInstance || !authenticated) {
       return alert(unauthInteractionErrorMessage);
     }
@@ -761,11 +757,13 @@ function Status({
     if (e?.shiftKey || e?.syntheticEvent?.shiftKey) {
       const newWin = openCompose({
         replyToStatus: status,
+        replyMode,
       });
       if (newWin) return;
     }
     showCompose({
       replyToStatus: status,
+      replyMode,
     });
   };
 
@@ -1041,17 +1039,85 @@ function Status({
         </div>
       )
     );
+  const mentionsCount = useMemo(() => {
+    if (!mentions?.length) return false;
+    const allMentions = new Set([accountId, ...mentions.map((m) => m.id)]);
+    return [...allMentions].filter((m) => m !== currentAccount).length;
+  }, [accountId, mentions?.length, currentAccount]);
+  const tooManyMentions = mentionsCount > 3;
+  const ReplyMenuContent = () => (
+    <>
+      <Icon icon="comment" />
+      <span>
+        {repliesCount > 0
+          ? shortenNumber(repliesCount)
+          : tooManyMentions
+            ? t`Reply…`
+            : t`Reply`}
+      </span>
+    </>
+  );
+  const replyModeMenuItems = (
+    <>
+      <MenuItem onClick={(e) => replyStatus(e, 'all')}>
+        <small>
+          <Trans>Reply all</Trans>
+          <br />
+          <span class="more-insignificant">
+            <Plural value={mentionsCount} other="# mentions" />
+          </span>
+        </small>
+      </MenuItem>
+      <MenuItem onClick={(e) => replyStatus(e, 'author-first')}>
+        <small>
+          <Trans>Reply all</Trans>
+          <br />
+          <span class="more-insignificant">
+            <Plural
+              value={mentionsCount - 1}
+              other={
+                <Trans comment="Author mention appears first, other mentions appear below with newlines in between">
+                  <span class="bidi-isolate">@{username || acct}</span> first, #
+                  others below
+                </Trans>
+              }
+            />
+          </span>
+        </small>
+      </MenuItem>
+      <MenuItem onClick={(e) => replyStatus(e, 'author-only')}>
+        <small>
+          <Trans>Reply</Trans>
+          <br />
+          <span class="more-insignificant">
+            <Trans>
+              Only <span class="bidi-isolate">@{username || acct}</span>
+            </Trans>
+          </span>
+        </small>
+      </MenuItem>
+    </>
+  );
   const StatusMenuItems = (
     <>
       {!isSizeLarge && sameInstance && (
         <>
           <div class="menu-control-group-horizontal status-menu">
-            <MenuItem onClick={replyStatus}>
-              <Icon icon="comment" />
-              <span>
-                {repliesCount > 0 ? shortenNumber(repliesCount) : t`Reply`}
-              </span>
-            </MenuItem>
+            {tooManyMentions ? (
+              <SubMenu2
+                openTrigger="clickOnly"
+                direction="bottom"
+                overflow="auto"
+                gap={-8}
+                shift={8}
+                menuClassName="menu-emphasized"
+                label={<ReplyMenuContent />}
+              >
+                {replyModeMenuItems}
+              </SubMenu2>
+            ) : (
+              <MenuItem onClick={replyStatus}>{<ReplyMenuContent />}</MenuItem>
+            )}
             <MenuConfirm
               subMenu
               confirmLabel={
@@ -1186,7 +1252,7 @@ function Status({
               <Trans>Boosted/Liked by…</Trans>
             </span>
           </MenuItem>
-          {supportsNativeQuote() && isSelf && (
+          {supportsNativeQuote() && (
             <MenuItem
               onClick={() => {
                 setShowQuotes(true);
@@ -1383,213 +1449,219 @@ function Status({
           </span>
         </MenuItem>
       )}
-      {(isSelf || mentionSelf) && <MenuDivider />}
-      {(isSelf || mentionSelf) && (
-        <MenuItem
-          onClick={async () => {
-            try {
-              const newStatus = await masto.v1.statuses
-                .$select(id)
-                [muted ? 'unmute' : 'mute']();
-              saveStatus(newStatus, instance);
-              showToast(
-                muted ? t`Conversation unmuted` : t`Conversation muted`,
-              );
-            } catch (e) {
-              console.error(e);
-              showToast(
-                muted
-                  ? t`Unable to unmute conversation`
-                  : t`Unable to mute conversation`,
-              );
-            }
-          }}
-        >
-          {muted ? (
-            <>
-              <Icon icon="unmute" />
-              <span>
-                <Trans>Unmute conversation</Trans>
-              </span>
-            </>
-          ) : (
-            <>
-              <Icon icon="mute" />
-              <span>
-                <Trans>Mute conversation</Trans>
-              </span>
-            </>
-          )}
-        </MenuItem>
-      )}
-      {isSelf && isPinnable && (
-        <MenuItem
-          onClick={async () => {
-            try {
-              const newStatus = await masto.v1.statuses
-                .$select(id)
-                [pinned ? 'unpin' : 'pin']();
-              saveStatus(newStatus, instance);
-              showToast(
-                pinned
-                  ? t`Post unpinned from profile`
-                  : t`Post pinned to profile`,
-              );
-            } catch (e) {
-              console.error(e);
-              showToast(
-                pinned ? t`Unable to unpin post` : t`Unable to pin post`,
-              );
-            }
-          }}
-        >
-          {pinned ? (
-            <>
-              <Icon icon="unpin" />
-              <span>
-                <Trans>Unpin from profile</Trans>
-              </span>
-            </>
-          ) : (
-            <>
-              <Icon icon="pin" />
-              <span>
-                <Trans>Pin to profile</Trans>
-              </span>
-            </>
-          )}
-        </MenuItem>
-      )}
-      {isSelf && (
+      {authenticated && (
         <>
-          {supportsNativeQuote() &&
-            !['private', 'direct'].includes(visibility) && (
-              <MenuItem onClick={() => setShowQuoteSettings(true)}>
-                <Icon icon="quote2" />
-                <small>
-                  <Trans>Quote settings</Trans>
-                  <br />
-                  <span class="more-insignificant">
-                    {_(quoteApprovalPolicyMessages[postQuoteApprovalPolicy])}
-                  </span>
-                </small>
-              </MenuItem>
-            )}
-          <div class="menu-horizontal">
-            {supports('@mastodon/post-edit') && (
-              <MenuItem
-                onClick={() => {
-                  showCompose({
-                    editStatus: status,
-                    quoteStatus: status.quote?.quotedStatus,
-                  });
-                }}
-              >
-                <Icon icon="pencil" />
-                <span>
-                  <Trans>Edit</Trans>
-                </span>
-              </MenuItem>
-            )}
-            {isSizeLarge && (
-              <MenuConfirm
-                subMenu
-                confirmLabel={
-                  <>
-                    <Icon icon="trash" />
-                    <span>
-                      <Trans>Delete this post?</Trans>
-                    </span>
-                  </>
+          {(isSelf || mentionSelf) && <MenuDivider />}
+          {(isSelf || mentionSelf) && (
+            <MenuItem
+              onClick={async () => {
+                try {
+                  const newStatus = await masto.v1.statuses
+                    .$select(id)
+                    [muted ? 'unmute' : 'mute']();
+                  saveStatus(newStatus, instance);
+                  showToast(
+                    muted ? t`Conversation unmuted` : t`Conversation muted`,
+                  );
+                } catch (e) {
+                  console.error(e);
+                  showToast(
+                    muted
+                      ? t`Unable to unmute conversation`
+                      : t`Unable to mute conversation`,
+                  );
                 }
-                itemProps={{
-                  className: 'danger',
-                }}
-                menuItemClassName="danger"
-                onClick={() => {
-                  // const yes = confirm('Delete this post?');
-                  // if (yes) {
-                  (async () => {
-                    try {
-                      await masto.v1.statuses.$select(id).remove();
-                      const cachedStatus = getStatus(id, instance);
-                      cachedStatus._deleted = true;
-                      showToast(t`Post deleted`);
-                    } catch (e) {
-                      console.error(e);
-                      showToast(t`Unable to delete post`);
-                    }
-                  })();
-                  // }
-                }}
-              >
-                <Icon icon="trash" />
-                <span>
-                  <Trans>Delete…</Trans>
-                </span>
-              </MenuConfirm>
-            )}
-          </div>
-        </>
-      )}
-      {!isSelf && isSizeLarge && (
-        <>
-          <MenuDivider />
-          {isQuotingMyPost && (
-            <MenuConfirm
-              subMenu
-              confirmLabel={
-                <>
-                  <Icon icon="quote" />
-                  <span>
-                    <Trans>
-                      Remove my post from{' '}
-                      <span class="bidi-isolate">@{username || acct}</span>'s
-                      post?
-                    </Trans>
-                  </span>
-                </>
-              }
-              itemProps={{
-                className: 'danger',
-              }}
-              menuItemClassName="danger"
-              onClick={() => {
-                (async () => {
-                  try {
-                    // POST /api/v1/statuses/:id/quotes/:quoting_status_id/revoke
-                    const quotedStatusID = quote.quotedStatus.id;
-                    await masto.v1.statuses
-                      .$select(quotedStatusID)
-                      .quotes.$select(id)
-                      .revoke.create();
-                    showToast(t`Quote removed`);
-                    states.reloadStatusPage++;
-                  } catch (e) {
-                    console.error(e);
-                    showToast(t`Unable to remove quote`);
-                  }
-                })();
               }}
             >
-              <Icon icon="quote" />
-              <Trans>Remove quote…</Trans>
-            </MenuConfirm>
+              {muted ? (
+                <>
+                  <Icon icon="unmute" />
+                  <span>
+                    <Trans>Unmute conversation</Trans>
+                  </span>
+                </>
+              ) : (
+                <>
+                  <Icon icon="mute" />
+                  <span>
+                    <Trans>Mute conversation</Trans>
+                  </span>
+                </>
+              )}
+            </MenuItem>
           )}
-          <MenuItem
-            className="danger"
-            onClick={() => {
-              states.showReportModal = {
-                account: status.account,
-                post: status,
-              };
-            }}
-          >
-            <Icon icon="flag" />
-            <span>
-              <Trans>Report post…</Trans>
-            </span>
-          </MenuItem>
+          {isSelf && isPinnable && (
+            <MenuItem
+              onClick={async () => {
+                try {
+                  const newStatus = await masto.v1.statuses
+                    .$select(id)
+                    [pinned ? 'unpin' : 'pin']();
+                  saveStatus(newStatus, instance);
+                  showToast(
+                    pinned
+                      ? t`Post unpinned from profile`
+                      : t`Post pinned to profile`,
+                  );
+                } catch (e) {
+                  console.error(e);
+                  showToast(
+                    pinned ? t`Unable to unpin post` : t`Unable to pin post`,
+                  );
+                }
+              }}
+            >
+              {pinned ? (
+                <>
+                  <Icon icon="unpin" />
+                  <span>
+                    <Trans>Unpin from profile</Trans>
+                  </span>
+                </>
+              ) : (
+                <>
+                  <Icon icon="pin" />
+                  <span>
+                    <Trans>Pin to profile</Trans>
+                  </span>
+                </>
+              )}
+            </MenuItem>
+          )}
+          {isSelf && (
+            <>
+              {supportsNativeQuote() &&
+                !['private', 'direct'].includes(visibility) && (
+                  <MenuItem onClick={() => setShowQuoteSettings(true)}>
+                    <Icon icon="quote2" />
+                    <small>
+                      <Trans>Quote settings</Trans>
+                      <br />
+                      <span class="more-insignificant">
+                        {_(
+                          quoteApprovalPolicyMessages[postQuoteApprovalPolicy],
+                        )}
+                      </span>
+                    </small>
+                  </MenuItem>
+                )}
+              <div class="menu-horizontal">
+                {supports('@mastodon/post-edit') && (
+                  <MenuItem
+                    onClick={() => {
+                      showCompose({
+                        editStatus: status,
+                        quoteStatus: status.quote?.quotedStatus,
+                      });
+                    }}
+                  >
+                    <Icon icon="pencil" />
+                    <span>
+                      <Trans>Edit</Trans>
+                    </span>
+                  </MenuItem>
+                )}
+                {isSizeLarge && (
+                  <MenuConfirm
+                    subMenu
+                    confirmLabel={
+                      <>
+                        <Icon icon="trash" />
+                        <span>
+                          <Trans>Delete this post?</Trans>
+                        </span>
+                      </>
+                    }
+                    itemProps={{
+                      className: 'danger',
+                    }}
+                    menuItemClassName="danger"
+                    onClick={() => {
+                      // const yes = confirm('Delete this post?');
+                      // if (yes) {
+                      (async () => {
+                        try {
+                          await masto.v1.statuses.$select(id).remove();
+                          const cachedStatus = getStatus(id, instance);
+                          cachedStatus._deleted = true;
+                          showToast(t`Post deleted`);
+                        } catch (e) {
+                          console.error(e);
+                          showToast(t`Unable to delete post`);
+                        }
+                      })();
+                      // }
+                    }}
+                  >
+                    <Icon icon="trash" />
+                    <span>
+                      <Trans>Delete…</Trans>
+                    </span>
+                  </MenuConfirm>
+                )}
+              </div>
+            </>
+          )}
+          {!isSelf && isSizeLarge && (
+            <>
+              <MenuDivider />
+              {isQuotingMyPost && (
+                <MenuConfirm
+                  subMenu
+                  confirmLabel={
+                    <>
+                      <Icon icon="quote" />
+                      <span>
+                        <Trans>
+                          Remove my post from{' '}
+                          <span class="bidi-isolate">@{username || acct}</span>
+                          's post?
+                        </Trans>
+                      </span>
+                    </>
+                  }
+                  itemProps={{
+                    className: 'danger',
+                  }}
+                  menuItemClassName="danger"
+                  onClick={() => {
+                    (async () => {
+                      try {
+                        // POST /api/v1/statuses/:id/quotes/:quoting_status_id/revoke
+                        const quotedStatusID = quote.quotedStatus.id;
+                        await masto.v1.statuses
+                          .$select(quotedStatusID)
+                          .quotes.$select(id)
+                          .revoke.create();
+                        showToast(t`Quote removed`);
+                        states.reloadStatusPage++;
+                      } catch (e) {
+                        console.error(e);
+                        showToast(t`Unable to remove quote`);
+                      }
+                    })();
+                  }}
+                >
+                  <Icon icon="quote" />
+                  <Trans>Remove quote…</Trans>
+                </MenuConfirm>
+              )}
+              <MenuItem
+                className="danger"
+                onClick={() => {
+                  states.showReportModal = {
+                    account: status.account,
+                    post: status,
+                  };
+                }}
+              >
+                <Icon icon="flag" />
+                <span>
+                  <Trans>Report post…</Trans>
+                </span>
+              </MenuItem>
+            </>
+          )}
         </>
       )}
     </>
@@ -1639,11 +1711,19 @@ function Status({
   );
 
   const hotkeysEnabled = !readOnly && !previewMode && !quoted;
-  const rRef = useHotkeys('r, shift+r', replyStatus, {
-    enabled: hotkeysEnabled,
-    useKey: true,
-    ignoreEventWhen: (e) => e.metaKey || e.ctrlKey || e.altKey,
-  });
+  const rRef = useHotkeys(
+    'r, shift+r',
+    (e, handler) => {
+      // Fix bug: shift+r is fired even when r is pressed due to useKey: true
+      if (e.shiftKey !== handler.shift) return;
+      replyStatus(e);
+    },
+    {
+      enabled: hotkeysEnabled,
+      useKey: true,
+      ignoreEventWhen: (e) => e.metaKey || e.ctrlKey || e.altKey,
+    },
+  );
   const fRef = useHotkeys('f, l', favouriteStatusNotify, {
     enabled: hotkeysEnabled,
     ignoreEventWhen: (e) => e.metaKey || e.ctrlKey || e.altKey || e.shiftKey,
@@ -1835,6 +1915,7 @@ function Status({
     visibility,
   ]);
   const showCommentCount = useMemo(() => {
+    if (forceShowCommentCount && repliesCount > 0) return true;
     if (
       card ||
       poll ||
@@ -1848,13 +1929,13 @@ function Status({
     ) {
       return false;
     }
-    const questionRegex = /[??？︖❓❔⁇⁈⁉¿‽؟]/;
-    const containsQuestion = questionRegex.test(content);
+    const containsQuestion = QUESTION_REGEX.test(content);
     if (!containsQuestion) return false;
     if (contentLength > 0 && contentLength <= SHOW_COMMENT_COUNT_LIMIT) {
       return true;
     }
   }, [
+    forceShowCommentCount,
     card,
     poll,
     sensitive,
@@ -1986,7 +2067,11 @@ function Status({
                 class="reply-button"
                 icon="comment"
                 iconSize="m"
-                onClick={replyStatus}
+                // Menu doesn't work here
+                // Temporary solution: reply author-first if too many mentions
+                onClick={(e) =>
+                  replyStatus(e, tooManyMentions ? 'author-first' : 'all')
+                }
               />
               <StatusButton
                 size="s"
@@ -2542,7 +2627,12 @@ function Status({
                       </div>
                     </MultipleMediaFigure>
                   ))}
-                <QuoteStatuses id={id} instance={instance} level={quoted} />
+                <QuoteStatuses
+                  id={id}
+                  instance={instance}
+                  level={quoted}
+                  collapsed={!isSizeLarge && !withinContext}
+                />
                 {!!card &&
                   /^https/i.test(card?.url) &&
                   !sensitive &&
@@ -2684,14 +2774,36 @@ function Status({
               )}
               <div class={`actions ${_deleted ? 'disabled' : ''}`}>
                 <div class="action has-count">
-                  <StatusButton
-                    title={t`Reply`}
-                    alt={t`Comments`}
-                    class="reply-button"
-                    icon="comment"
-                    count={repliesCount}
-                    onClick={replyStatus}
-                  />
+                  {tooManyMentions ? (
+                    <Menu2
+                      openTrigger="clickOnly"
+                      direction="bottom"
+                      overflow="auto"
+                      gap={-8}
+                      shift={8}
+                      menuClassName="menu-emphasized"
+                      menuButton={
+                        <StatusButton
+                          title={t`Reply`}
+                          alt={t`Comments`}
+                          class="reply-button"
+                          icon="comment"
+                          count={repliesCount}
+                        />
+                      }
+                    >
+                      {replyModeMenuItems}
+                    </Menu2>
+                  ) : (
+                    <StatusButton
+                      title={t`Reply`}
+                      alt={t`Comments`}
+                      class="reply-button"
+                      icon="comment"
+                      count={repliesCount}
+                      onClick={replyStatus}
+                    />
+                  )}
                 </div>
                 {/* <div class="action has-count">
                 <StatusButton
@@ -2943,18 +3055,23 @@ const unfulfilledText = {
   revoked: msg`Post removed by author`,
 };
 
-const QuoteStatuses = memo(({ id, instance, level = 0 }) => {
+const QuoteStatuses = memo(({ id, instance, level = 0, collapsed = false }) => {
   if (!id || !instance) return;
   const { _ } = useLingui();
   const snapStates = useSnapshot(states);
   const sKey = statusKey(id, instance);
   const quotes = snapStates.statusQuotes[sKey];
-  const uniqueQuotes = quotes?.filter(
+  let uniqueQuotes = quotes?.filter(
     (q, i, arr) => q.native || arr.findIndex((q2) => q2.url === q.url) === i,
   );
 
   if (!uniqueQuotes?.length) return;
   if (level > 2) return;
+
+  if (collapsed) {
+    // Only show the first quote if "collapsed"
+    uniqueQuotes = [uniqueQuotes[0]];
+  }
 
   const filterContext = useContext(FilterContext);
   const currentAccount = getCurrentAccID();

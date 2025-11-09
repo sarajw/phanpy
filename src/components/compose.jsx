@@ -95,7 +95,7 @@ const DEFAULT_LANG = localeMatch(
 );
 
 // https://github.com/mastodon/mastodon/blob/c4a429ed47e85a6bbf0d470a41cc2f64cf120c19/app/javascript/mastodon/features/compose/util/counter.js
-const usernameRegex = /(^|[^\/\w])@(([a-z0-9_]+)@[a-z0-9\.\-]+[a-z0-9]+)/gi;
+const usernameRegex = /(^|[^\/\w])[@＠](([a-z0-9_]+)@[a-z0-9\.\-]+[a-z0-9]+)/gi;
 const urlPlaceholder = '$2xxxxxxxxxxxxxxxxxxxxxxx';
 function countableText(inputText) {
   return inputText
@@ -186,10 +186,13 @@ function Compose({
   const [scheduledAt, setScheduledAt] = useState(null);
   const [quoteSuggestion, setQuoteSuggestion] = useState(null);
   const [localQuoteStatus, setLocalQuoteStatus] = useState(quoteStatus);
+  const [quoteCleared, setQuoteCleared] = useState(false);
 
   const prefs = getPreferences();
 
-  const currentQuoteStatus = localQuoteStatus || quoteStatus;
+  const currentQuoteStatus = quoteCleared
+    ? null
+    : localQuoteStatus || quoteStatus;
 
   // Quote eligibility logic duplicated from status.jsx
   const checkQuoteEligibility = (status) => {
@@ -227,6 +230,11 @@ function Compose({
 
       // Cannot add/remove/replace current quote when editing
       if (editStatus) {
+        return;
+      }
+
+      // Don't show quote suggestion when visibility is 'direct'
+      if (visibility === 'direct') {
         return;
       }
 
@@ -750,6 +758,9 @@ function Compose({
 
   useEffect(() => {
     const handleItems = (e) => {
+      // Ignore drops when a sheet is open
+      if (document.querySelector('.sheet')) return;
+
       const { items } = e.clipboardData || e.dataTransfer;
       const files = [];
       const unsupportedFiles = [];
@@ -1322,7 +1333,10 @@ function Compose({
                   if (supportsNativeQuote()) {
                     params.quote_approval_policy = quoteApprovalPolicy;
                   }
-                  if (supports('@mastodon/edit-media-attributes')) {
+                  if (
+                    supports('@mastodon/edit-media-attributes') ||
+                    supports('@gotosocial/edit-media-attributes')
+                  ) {
                     params.media_attributes = mediaAttachments.map(
                       (attachment) => {
                         return {
@@ -1897,6 +1911,35 @@ function Compose({
                     e.target.value === 'direct'
                   ) {
                     setQuoteApprovalPolicy('nobody');
+                  }
+
+                  if (e.target.value === 'direct' && currentQuoteStatus?.id) {
+                    const quoteURL = currentQuoteStatus.url;
+                    if (quoteURL) {
+                      const currentText = textareaRef.current.value;
+                      if (!currentText.includes(quoteURL)) {
+                        textareaRef.current.value =
+                          currentText + (currentText ? '\n' : '') + quoteURL;
+                        oninputTextarea();
+                      }
+                    }
+                    setQuoteCleared(true);
+                    showToast(t`Quotes can't be embedded in private mentions.`);
+                  } else if (e.target.value !== 'direct' && quoteCleared) {
+                    const quoteURL = (localQuoteStatus || quoteStatus)?.url;
+                    if (quoteURL && textareaRef.current) {
+                      const currentValue = textareaRef.current.value;
+                      const linkPos = currentValue.indexOf(quoteURL);
+                      if (linkPos !== -1) {
+                        let newValue =
+                          currentValue.slice(0, linkPos) +
+                          currentValue.slice(linkPos + quoteURL.length);
+                        newValue = newValue.replace(/\n+$/, '');
+                        textareaRef.current.value = newValue;
+                        oninputTextarea();
+                      }
+                    }
+                    setQuoteCleared(false);
                   }
                 }}
                 disabled={uiState === 'loading' || !!editStatus}

@@ -17,14 +17,14 @@
     "code": "cs-CZ",
     "nativeName": "čeština",
     "name": "Czech",
-    "completion": 74,
+    "completion": 73,
     "listed": true
   },
   {
     "code": "de-DE",
     "nativeName": "Deutsch",
     "name": "German",
-    "completion": 90,
+    "completion": 89,
     "listed": true
   },
   {
@@ -38,14 +38,14 @@
     "code": "es-ES",
     "nativeName": "español",
     "name": "Spanish",
-    "completion": 99,
+    "completion": 100,
     "listed": true
   },
   {
     "code": "eu-ES",
     "nativeName": "euskara",
     "name": "Basque",
-    "completion": 99,
+    "completion": 100,
     "listed": true
   },
   {
@@ -66,7 +66,7 @@
     "code": "fr-FR",
     "nativeName": "français",
     "name": "French",
-    "completion": 95,
+    "completion": 94,
     "listed": true
   },
   {
@@ -94,7 +94,7 @@
     "code": "ja-JP",
     "nativeName": "日本語",
     "name": "Japanese",
-    "completion": 43,
+    "completion": 42,
     "listed": false
   },
   {
@@ -115,14 +115,14 @@
     "code": "lt-LT",
     "nativeName": "lietuvių",
     "name": "Lithuanian",
-    "completion": 93,
+    "completion": 92,
     "listed": true
   },
   {
     "code": "nb-NO",
     "nativeName": "norsk bokmål",
     "name": "Norwegian Bokmål",
-    "completion": 45,
+    "completion": 44,
     "listed": false
   },
   {
@@ -136,28 +136,28 @@
     "code": "pl-PL",
     "nativeName": "polski",
     "name": "Polish",
-    "completion": 99,
+    "completion": 100,
     "listed": true
   },
   {
     "code": "pt-BR",
     "nativeName": "português",
     "name": "Portuguese",
-    "completion": 94,
+    "completion": 93,
     "listed": true
   },
   {
     "code": "pt-PT",
     "nativeName": "português",
     "name": "Portuguese",
-    "completion": 94,
+    "completion": 93,
     "listed": true
   },
   {
     "code": "ru-RU",
     "nativeName": "русский",
     "name": "Russian",
-    "completion": 99,
+    "completion": 100,
     "listed": true
   },
   {
@@ -192,7 +192,7 @@
     "code": "zh-TW",
     "nativeName": "繁體中文",
     "name": "Traditional Chinese",
-    "completion": 29,
+    "completion": 28,
     "listed": false
   }
 ]
